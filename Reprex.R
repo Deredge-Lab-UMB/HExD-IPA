@@ -291,23 +291,7 @@ layout.show(n=12)
 {
   y.sg4 <- savgol(y, 3, forder = 4, dorder = 0)
   
-  df_smooth <- data.frame(x, y.sg4)
-  
-  localMaxima <- function(x) {
-    # Use -Inf instead if x is numeric (non-integer)
-    y <- diff(c(-.Machine$integer.max, x)) > 0L
-    rle(y)$lengths
-    y <- cumsum(rle(y)$lengths)
-    y <- y[seq.int(1L, length(y), 2L)]
-    if (x[[1]] == x[[2]]) {
-      y <- y[-1]
-    }
-    y
-  }
-  
-  max_y_idx <- localMaxima(y)
-  
-  max_y <- y.sg4[max_y_idx]
+  df_smooth <- data.frame(x, y.sg4),
   
   find_peaks_dat <- df_smooth[df_smooth$y.sg4 %in% c(max_y),]
   
