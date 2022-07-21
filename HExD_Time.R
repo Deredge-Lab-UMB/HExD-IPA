@@ -1,34 +1,8 @@
-###FIRST TIME ONLY:
 {
-  #install.packages("readxl")
-  #install.packages("mixtools")
-  #install.packages("ggpmisc")
-  #install.packages("ggplot2")
-  #install.packages("splus2R")
-  #install.packages("slider")
-  #install.packages("openxlsx")
-  #install.packages("data.table")
-  #install.packages("zoo")
-  #install.packages("pracma")
-  #install.packages("flextable")
-  #install.packages("officer")
-  #install.packages("webshot")
-  #install.packages("dplyr")
-  #install.packages("magick")
-  #install.packages("tidyverse")
-  #install.packages("styler")
-  #install_phantomjs()
-}
-###FIRST TIME ONLY ^^^
-
-
-{
-  library(readxl)
   library(mixtools)
   library(ggpmisc)
   library(ggplot2)
   library(splus2R)
-  library(slider)
   library(openxlsx)
   library(data.table)
   library(zoo)
@@ -40,7 +14,6 @@
   library(dplyr)
   library(magick)
   library(reprex)
-  library(qpcR)
   library(ggformula)
   library(ggthemes)
   library(jpeg)
@@ -55,23 +28,23 @@
 
 ###Span good range 0.3 to 0.8, maxit good range 90 to 150, epsilon good range 1e-03 to 1e-08.
 ### Initial should be set to span = 0.5, Maxit=150, Epsiol=1e-06. If the code goes infinate set span = 0.7, and epsilon=1e-03.
-span=0.5
+span=0.7
 maxit=150
 epsilon = 1e-06
 
-setwd("E:/For Vincent/p38/EX1/Alpha/130-145")
-data <- read_csv("alpha 130-145.csv")
+setwd("E:/For Vincent/p38/EX1/Beta/282-288")
+data <- read_csv("beta 282-288.csv")
 show_col_types = FALSE
 num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7,8)
-time <- c(1, 10,60, (10*60),(10*60), (2*3600), (2*3600),(3*3600))
-charge <- c(3)
+time <- c(1, 10,10, (10*60),(10*60), (2*3600), (2*3600),(3*3600))
+charge <- c(2)
 
 
 #XUndeut <- undeut
 #XTD <- TD
 
 
-data_list <- qpcR:::cbind.na(XUndeut, X10.sec,X11.sec,X10.m,X11.m,X2.hr,X2.01h, XTD)
+data_list <- qpcR:::cbind.na(XUndeut, X10.sec,X11.sec, X10.m,X11.m, X2.h,X2.01.h, XTD)
 
 {
   Peptide_Names <- c(colnames(data))
