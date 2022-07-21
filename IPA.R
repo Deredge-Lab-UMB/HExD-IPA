@@ -1,14 +1,3 @@
-###FIRST TIME ONLY:
-{
-#install.packages("DT")
-#install.packages("shiny")
-#install.packages("shinydashboard")
-#install.packages("shinydashboardPlus")
-#install.packages("ggvis")
-#install.packages("ggplot2")
-#install.packages("dplyr")
-}
-###FIRST TIME ONLY ^^^
 {
 library(DT)
 library(shiny)
@@ -46,6 +35,7 @@ library(dplyr)
       
       selectInput(inputId = "y", label = "Select y-axis Variable:",
                   choices = NULL),
+      
       
       menuItem("Raw Data", tabName = "RawData",
                icon = icon("table")),
