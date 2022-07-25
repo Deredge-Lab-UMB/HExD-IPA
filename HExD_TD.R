@@ -1,0 +1,2755 @@
+{
+  library(mixtools)
+  library(ggpmisc)
+  library(ggplot2)
+  library(splus2R)
+  library(openxlsx)
+  library(data.table)
+  library(zoo)
+  library(pracma)
+  library(flextable)
+  library(officer)
+  library(webshot)
+  library(plyr)
+  library(dplyr)
+  library(magick)
+  library(reprex)
+  library(ggformula)
+  library(ggthemes)
+  library(jpeg)
+  library(grid)
+  library(gridExtra)
+  library(readr)
+  show_col_types = FALSE
+}
+
+
+
+
+###Span good range 0.3 to 0.8, maxit good range 90 to 150, epsilon good range 1e-03 to 1e-08.
+### Initial should be set to span = 0.5, Maxit=150, Epsiol=1e-06. If the code goes infinate set span = 0.7, and epsilon=1e-03.
+span=0.7
+maxit=150
+epsilon = 1e-06
+
+setwd("C:/Users/Owner/OneDrive/UMB/Deredge Lab/For Vincent/p38/EX1/Beta/164-169/TD")
+data <- read_csv("beta 164-169.csv")
+show_col_types = FALSE
+num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7, 8)
+time <- c(1, 10, 11, (60*10),(60*11),(3600*2),(3600*2.01))
+charge <- c(2)
+Pep_Name <- c("p38_Beta_164-169")
+
+
+#XUndeut <- undeut
+#XTD <- TD
+
+
+data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec, X11.sec, X10.m,X11.m, X2.h, X2.01.h)
+
+{
+  Peptide_Names <- c(colnames(data))
+  output <- list()
+  c.fit_tot <- list()
+}
+
+###TD
+{
+  k=1
+  data_x <- na.omit(data_list[k])
+  data_y <- na.omit(data_list[k+1])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+}
+{
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+    sd_con <-sigma.fit
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p1 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p1<- p1+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p1 <- p1 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=4, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_df <- c(0, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  
+  plot(p1)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p1,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Chk <- FWHM_1
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  
+  c.fit_tot[[k]] <- c.fit
+  
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1],FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k]," ", "Unimodal Peak")))
+  }    
+}
+
+
+###Undeut
+Color_1=3
+Color_2=4
+
+{
+  k=2
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p2 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p2<- p2+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(length(mu.fit)>1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+    lo2 <- spline(x, y2, method="natural")
+    p2 <- p2 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+      geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+    plot_sum_y <- y+y2
+    plot_sum_df <- data.frame(x,plot_sum_y)
+    p2 <- p2 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+    ADI_1 <- (0)
+    ADI_1 <- (0)
+    ADI_df <- c(ADI_1, ADI_2)
+    FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+  }else{
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p2 <- p2 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (0)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }
+  ADI_Norm <- output[[1]]$Centroid-centroid
+  
+  plot(p2)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p2,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Third Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=3
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p3 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p3<- p3+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p3 <- p3 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p3 <- p3 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p3 <- p3 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p3 <- p3 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p3)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p3,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Fourth Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=4
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p4 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p4<- p4+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p4 <- p4 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p4 <- p4 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p4 <- p4 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p4 <- p4 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p4)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p4,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Fifth Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=5
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p5 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p5<- p5+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p5 <- p5 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p5 <- p5 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p5 <- p5 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p5 <- p5 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p5)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p5,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Sixth Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=6
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p6 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p6<- p6+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p6 <- p6 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p6 <- p6 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p6 <- p6 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p6 <- p6 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p6)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p6,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Seventh Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=7
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p7 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p7<- p7+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p7 <- p7 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p7 <- p7 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p7 <- p7 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p7 <- p7 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p7)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p7,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Eigth Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=8
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p8 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p8<- p8+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p8 <- p8 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p8 <- p8 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p8 <- p8 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p8 <- p8 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p8)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p8,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Nineth Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=9
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p9 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p9<- p9+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p9 <- p9 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p9 <- p9 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p9 <- p9 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p9 <- p9 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p9)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p9,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Tenth Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=10
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p10 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p10<- p10+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p10 <- p10 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p10 <- p10 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p10 <- p10 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p10 <- p10 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p10)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p10,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Eleventh Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=11
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p11 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p11<- p11+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p11 <- p11 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+    if(length(mu.fit)>1){
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+      lo2 <- spline(x, y2, method="natural")
+      p11 <- p11 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+        geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+      plot_sum_y <- y+y2
+      plot_sum_df <- data.frame(x,plot_sum_y)
+      p11 <- p11 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+      ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, ADI_2)
+      FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+    }else{
+      x <- dffit$x
+      y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+      lo <- spline(x, y, method="natural")
+      p11 <- p11 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+      centroid <- ((sum(x_i*y_i))/sum(y_i))
+      ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+      ADI_df <- c(ADI_1, 0)
+      FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+    }
+  }
+  plot(p11)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p11,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+###Twelfth Time Point
+Color_1=3
+Color_2=4
+Num_Envelops=2
+
+{
+  k=12
+  data_x <- na.omit(data_list[k+(k-1)])
+  data_y <- na.omit(data_list[k+1+(k-1)])
+  x_i <- c(data_x$x)
+  y_i <- c(data_y$y)
+  df <- data.frame(x_i,y_i)
+  charge_shift =1/charge
+  x <- data[print(Peptide_Names[k+(k-1)])]
+  x <- na.omit(x[[1]])
+  y.sg4 <- data[print(Peptide_Names[k+1+(k-1)])]
+  y.sg4 <- na.omit(y.sg4[[1]])
+  y.sg4 <- savgol(y.sg4, 3, 4, 0)
+  df_smooth <- data.frame(x, y.sg4)
+}
+{
+  mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
+  
+  ptest <- predict(loess(y_i ~ x_i, family="gaussian", span= span), df)
+  
+  p_pred <- data.frame(x_i, ptest)
+  
+  amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
+  
+  amp1_test <- amp1
+  
+  amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
+  
+  amp2_test <-amp2
+}
+{
+  if(mixture$mu[1] == mixture$mu[2] | (mixture$mu[2] - 1) < mixture$mu[1]){
+    x <- x_i
+    amp1 <- max(c(amp1$y, amp2$y))
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            sigma1 = mixture$sigma[1],
+                            C1 = amp1),
+               lower =c(0,mixture$sigma[1],0),
+               upper=c(Inf, mixture$sigma[1], 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients
+    mu.fit <- coef.fit[1]
+    sigma.fit <- coef.fit[2]
+    c.fit <- coef.fit[3]
+  }else {
+    x <- x_i
+    amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
+    amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    
+    
+    fit <- nls(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
+                        C2*exp(-(x-mean2)**2/(2 * sigma2**2))),
+               data = df,
+               start = list(mean1 = mixture$mu[1],
+                            mean2 = mixture$mu[2],
+                            sigma1 = mixture$sigma[1],
+                            sigma2 = mixture$sigma[2],
+                            C1 = amp1$y,
+                            C2 = amp2$y),
+               lower=c(0,mixture$mu[1],mixture$sigma[1],mixture$sigma[2],0,0),
+               upper=c(Inf, Inf, mixture$sigma[1], mixture$sigma[2], 100, 100),
+               algorithm = "port",
+    )
+    
+    dffit <- data.frame(x=x_i)
+    dffit$y <- predict(fit, newdata=dffit)
+    fit.sum <- summary(fit)
+    fit.sum
+    
+    coef.fit <- fit.sum$coefficients[,1]
+    mu.fit <- coef.fit[1:2]
+    sigma.fit <- coef.fit[3:4]
+    c.fit <- coef.fit[5:6]    
+  }
+}
+{
+  plot_x <- x_i
+  plot_y <-y_i
+  plot_df <- data.frame(plot_x, plot_y)
+  
+  smooth_x <- df_smooth$x
+  smooth_y <- df_smooth$y.sg4
+  
+  #original
+  p12 <- ggplot(data=df_smooth, aes(smooth_x,smooth_y), colour="black") +
+    geom_line(lwd=0.8)+
+    ggtitle(c(print(paste0(Peptide_Names[k+(k-1)]," ", paste0(Pep_Name))))) +
+    theme_tufte()+
+    theme(panel.border = element_rect(colour = "black", fill=NA, size=1.1),
+          plot.title = element_text(color="black", size=15, face="bold"),
+          axis.title = element_blank(),
+          axis.text.x = element_text(face="bold", color="Black",size=15),
+          axis.text.y = element_text(face="bold", color="Black",size=15)
+    )
+  #overall fit
+  p12<- p12+geom_line(data=plot_df, aes(plot_x,plot_y), color="red", lwd=1.3)
+  
+  #components of the fit
+  if(Num_Envelops==1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p12 <- p12 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }else{
+  if(length(mu.fit)>1){
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    y2 <- (c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2)))
+    lo2 <- spline(x, y2, method="natural")
+    p12 <- p12 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)+ 
+      geom_line(data=data.frame(lo2), aes(lo2$x,lo2$y),color=Color_2, lwd=1.3)
+    plot_sum_y <- y+y2
+    plot_sum_df <- data.frame(x,plot_sum_y)
+    p12 <- p12 + geom_line(data=plot_sum_df, aes(x,plot_sum_y), color="#E69F00", lwd=1.3)
+    ADI_1 <- (abs(mu.fit[1]-output[[2]]$Centroid)/ADI_Norm)
+    ADI_2 <- (abs(mu.fit[2]-output[[2]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, ADI_2)
+    FWHM_Sum = 2*sqrt(log(2)*2)*(sqrt((sigma.fit[1]^2)+(sigma.fit[2]^2)))
+  }else{
+    x <- dffit$x
+    y <- (c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2)))
+    lo <- spline(x, y, method="natural")
+    p12 <- p12 + geom_line(data=data.frame(lo), aes(lo$x,lo$y),color=Color_1, lwd=1.3)
+    centroid <- ((sum(x_i*y_i))/sum(y_i))
+    ADI_1 <- (abs(centroid-output[[1]]$Centroid)/ADI_Norm)
+    ADI_df <- c(ADI_1, 0)
+    FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
+  }
+  }
+  plot(p12)
+  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p12,width=7,height=7)
+  
+  FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
+  FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
+  FWHM <- FWHM_1
+  FWHM_Tot <- c(FWHM_Sum,NA)
+  FWHM_Diff <- (abs(FWHM_1-FWHM_Chk)/FWHM_Chk)
+  
+  y_AUC_1 <- c.fit[1] *exp(-(x-mu.fit[1])**2/(2 * sigma.fit[1]**2))
+  id <- order(dffit$x)
+  AUC_1 <- sum(diff(dffit$x[id])*rollmean(y_AUC_1[id],2))
+  AUC_1
+  y_AUC_2 <- c.fit[2] *exp(-(x-mu.fit[2])**2/(2 * sigma.fit[2]**2))
+  AUC_2 <- sum(diff(dffit$x[id])*rollmean(y_AUC_2[id],2))
+  AUC_2
+  AUC_tot_x <- plot_x
+  AUC_tot_y <- plot_y
+  id_2 <- order(plot_x)
+  AUC_tot_dat <- sum(diff(AUC_tot_x[id_2])*rollmean(AUC_tot_y[id_2],2))
+  AUC_Norm <- c((AUC_1/AUC_tot_dat),(AUC_2/AUC_tot_dat))
+  
+  AUC_list <- c(AUC_1, AUC_2)
+  AUC_tot <- c(AUC_tot_dat, NA)
+  
+  centroid <- ((sum(x_i*y_i))/sum(y_i))
+  if(amp1_test$y<amp2_test$y){
+    c.fit_tot[[k]] <- c(0,c.fit)
+  }else{
+    c.fit_tot[[k]] <-c.fit
+  }
+  
+  if(is.na(AUC_1) == FALSE && is.na(AUC_2)==FALSE){
+    if(AUC_Norm[1] >= 0.9 | AUC_Norm[2] >= 0.9 | AUC_Norm[1]<= 0.1 | AUC_Norm[2] <=0.1){
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1), ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area', 'Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+    }else {
+      output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit, centroid, c.fit, sigma.fit, FWHM, AUC_list, AUC_Norm, ADI_df, AUC_tot, FWHM_Tot))
+      colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total', 'Total Width')
+      rownames(output[[k]]) <- c((print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 1"))), (print(paste0(Peptide_Names[k+(k-1)]," ", "Bimodal Peak 2"))))
+    }
+  }else {
+    output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1], c(1),ADI_df[1], AUC_tot[1], FWHM_Tot[1]))
+    colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area', 'Normalized Area','Relative DA', 'Area Total','Total Width')
+    rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
+  } 
+  if(FWHM_Diff>=0.30){
+    stop("FWHM Of This Timepoint is Too Different from the TD Control. Please Rerun/Rework Parameters!")
+  }
+}
+
+
+
+###Finalize and Save Plot
+{
+  if(length(num_peptime)==1){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot1 <- image_border(plot1, "white","1000")
+    row1 <- image_append(c(plot1))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "300")
+    plotF<- magick::image_append(c(row1,legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==2){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))  
+    row1 <- image_append(c(plot1,plot2))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "300")
+    plotF<- magick::image_append(c(row1,legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==3){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    row1 <- image_append(c(plot1,plot2))
+    row2 <- image_append(c(plot3))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "300")
+    plotF<- magick::image_append(c(row1,row2,legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==4){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    row1 <- image_append(c(plot1,plot2))
+    row2 <- image_append(c(plot3,plot4))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "300")
+    plotF<- magick::image_append(c(row1,row2,legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==5){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    plot5 <- magick::image_read(paste0('p5',"_",Pep_Name,'.jpeg'))
+    row1 <- image_append(c(plot1,plot2,plot3))
+    row2 <- image_append(c(plot4,plot5))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "1500")
+    plotF<- magick::image_append(c(row1,row2,legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==6){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    plot5 <- magick::image_read(paste0('p5',"_",Pep_Name,'.jpeg'))
+    plot6 <- magick::image_read(paste0('p6',"_",Pep_Name,'.jpeg'))
+    row1 <- image_append(c(plot1,plot2,plot3))
+    row2 <- image_append(c(plot4,plot5,plot6))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "1500")
+    plotF<- magick::image_append(c(row1,row2,legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==7){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    plot5 <- magick::image_read(paste0('p5',"_",Pep_Name,'.jpeg'))
+    plot6 <- magick::image_read(paste0('p6',"_",Pep_Name,'.jpeg'))
+    plot7 <- magick::image_read(paste0('p7',"_",Pep_Name,'.jpeg'))
+    row1 <- image_append(c(plot1,plot2,plot3,plot4))
+    row2 <- image_append(c(plot5,plot6,plot7))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "2500")
+    plotF<- magick::image_append(c(row1,row2,legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==8){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    plot5 <- magick::image_read(paste0('p5',"_",Pep_Name,'.jpeg'))
+    plot6 <- magick::image_read(paste0('p6',"_",Pep_Name,'.jpeg'))
+    plot7 <- magick::image_read(paste0('p7',"_",Pep_Name,'.jpeg'))
+    plot8 <- magick::image_read(paste0('p8',"_",Pep_Name,'.jpeg'))
+    row1 <- image_append(c(plot1,plot2,plot3, plot4))
+    row2 <- image_append(c(plot5,plot6, plot7, plot8))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "2500")
+    plotF<- magick::image_append(c(row1,row2,legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==9){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    plot5 <- magick::image_read(paste0('p5',"_",Pep_Name,'.jpeg'))
+    plot6 <- magick::image_read(paste0('p6',"_",Pep_Name,'.jpeg'))
+    plot7 <- magick::image_read(paste0('p7',"_",Pep_Name,'.jpeg'))
+    plot8 <- magick::image_read(paste0('p8',"_",Pep_Name,'.jpeg')) 
+    plot9 <- magick::image_read(paste0('p9',"_",Pep_Name,'.jpeg')) 
+    row1 <- image_append(c(plot1,plot2,plot3))
+    row2 <- image_append(c(plot4,plot5,plot6))
+    row3 <- image_append(c(plot7,plot8,plot9))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "1500")
+    plotF<- magick::image_append(c(row1,row2,row3, legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==10){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    plot5 <- magick::image_read(paste0('p5',"_",Pep_Name,'.jpeg'))
+    plot6 <- magick::image_read(paste0('p6',"_",Pep_Name,'.jpeg'))
+    plot7 <- magick::image_read(paste0('p7',"_",Pep_Name,'.jpeg'))
+    plot8 <- magick::image_read(paste0('p8',"_",Pep_Name,'.jpeg')) 
+    plot9 <- magick::image_read(paste0('p9',"_",Pep_Name,'.jpeg'))
+    plot10 <- magick::image_read(paste0('p10',"_",Pep_Name,'.jpeg'))
+    row1 <- image_append(c(plot1,plot2,plot3,plot4))
+    row2 <- image_append(c(plot5,plot6,plot7,plot8))
+    row3 <- image_append(c(plot9,plot10))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "2500")
+    plotF<- magick::image_append(c(row1,row2,row3, legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==11){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    plot5 <- magick::image_read(paste0('p5',"_",Pep_Name,'.jpeg'))
+    plot6 <- magick::image_read(paste0('p6',"_",Pep_Name,'.jpeg'))
+    plot7 <- magick::image_read(paste0('p7',"_",Pep_Name,'.jpeg'))
+    plot8 <- magick::image_read(paste0('p8',"_",Pep_Name,'.jpeg')) 
+    plot9 <- magick::image_read(paste0('p9',"_",Pep_Name,'.jpeg'))
+    plot10 <- magick::image_read(paste0('p10',"_",Pep_Name,'.jpeg'))
+    plot11 <- magick::image_read(paste0('p11',"_",Pep_Name,'.jpeg')) 
+    row1 <- image_append(c(plot1,plot2,plot3,plot4))
+    row2 <- image_append(c(plot5,plot6,plot7,plot8))
+    row3 <- image_append(c(plot9,plot10,plot11))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "2500")
+    plotF<- magick::image_append(c(row1,row2,row3, legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  if(length(num_peptime)==12){
+    plot1 <- magick::image_read(paste0('p1',"_",Pep_Name,'.jpeg')) 
+    plot2 <- magick::image_read(paste0('p2',"_",Pep_Name,'.jpeg'))
+    plot3 <- magick::image_read(paste0('p3',"_",Pep_Name,'.jpeg')) 
+    plot4 <- magick::image_read(paste0('p4',"_",Pep_Name,'.jpeg'))
+    plot5 <- magick::image_read(paste0('p5',"_",Pep_Name,'.jpeg'))
+    plot6 <- magick::image_read(paste0('p6',"_",Pep_Name,'.jpeg'))
+    plot7 <- magick::image_read(paste0('p7',"_",Pep_Name,'.jpeg'))
+    plot8 <- magick::image_read(paste0('p8',"_",Pep_Name,'.jpeg')) 
+    plot9 <- magick::image_read(paste0('p9',"_",Pep_Name,'.jpeg'))
+    plot10 <- magick::image_read(paste0('p10',"_",Pep_Name,'.jpeg'))
+    plot11 <- magick::image_read(paste0('p11',"_",Pep_Name,'.jpeg')) 
+    plot12 <- magick::image_read(paste0('p12',"_",Pep_Name,'.jpeg')) 
+    row1 <- image_append(c(plot1,plot2,plot3,plot4))
+    row2 <- image_append(c(plot5,plot6,plot7,plot8))
+    row3 <- image_append(c(plot9,plot10,plot11,plot12))
+    legend <- magick::image_read("Legend_1.jpeg")
+    legend <- image_scale(legend,"2000")
+    legend <- image_scale(legend,"x150")
+    legend <- image_border(legend, "white", "2500")
+    plotF<- magick::image_append(c(row1,row2,row3, legend), stack=TRUE)
+    image_write(plotF, path = paste0("Final_Plot", "_", Pep_Name, ".jpeg"), format = "jpeg", quality = 100)
+  }
+  
+}
+
+
+###Data Table and Export
+{
+output_total = data.frame()
+for(z in num_peptime){
+  temp_df<- (output[[z]])
+  output_total <- rbind(output_total,temp_df)
+}
+
+c.fit_total = data.frame()
+for(z in num_peptime[2:length(num_peptime)]){
+  temp_df<- (c.fit_tot[[z]])
+  c.fit_total <-  qpcR:::rbind.na(c.fit_total,temp_df)
+}    
+  
+output_total
+c.fit_total[is.na(c.fit_total)] <- 0
+
+write.csv(output_total, paste0(Pep_Name, "_", "Final_Data.csv"))
+
+Final_Data_frame<- output_total %>%
+  as.data.frame() %>% 
+  add_rownames() %>% 
+  flextable()
+
+fin_bord <- fp_border(color ="dimgray", style="solid", width=2)
+
+Final_Data_frame<- Final_Data_frame %>%
+  set_table_properties(layout = "autofit")%>%
+  bg(bg="white", part="all")%>%
+  hline() %>%
+  set_header_labels(Final_Data_frame, rowname = "Timepoint")%>%
+  bold(part="header")%>%
+  bold(j=1)%>%
+  vline(j=1, border = fin_bord )
+
+autofit(Final_Data_frame)
+save_as_image(Final_Data_frame, path =paste0(Pep_Name, "_","Final_Data_Table.jpeg"))
+}
+
+
+###Normalized Area Data
+{
+output_tot_env1<- output_total[grep(pattern = "Bimodal Peak 1|Unimodal Peak", x=rownames(output_total)),]
+output_tot_env2 <-  output_total[grep(pattern = "Bimodal Peak 2", x=rownames(output_total)),]
+  
+Uni_Chk <- output_tot_env1[grep(pattern = "Unimodal Peak", x=rownames(output_tot_env1)),]
+
+Uni_Idx <- which((output_tot_env1$`Mean Value`)%in%(Uni_Chk$`Mean Value`))
+
+newrow <- c(NA, NA, NA, NA, NA, NA, 0, NA)
+
+  for(i in Uni_Idx){
+    if(i==1){
+      output_tot_env2 <- rbind(newrow,output_tot_env2)
+    }
+  }
+  
+  for(i in Uni_Idx){
+    if(i > 1){
+      r = i
+      newrow_1 <- c(NA, NA, NA, NA, NA, NA, 0, NA)
+      output_tot_env2 <- rbind(output_tot_env2[1:(i-1), ],newrow_1, output_tot_env2[- (1:(i-1)), ])
+    } 
+  }
+
+c.fit_idx <- which(c.fit_total[1]<c.fit_total[2])
+A_Norm_idx <- which(output_tot_env1$`Normalized Area`<output_tot_env2$`Normalized Area`)
+
+A_env1 <- (output_tot_env1$`Normalized Area`)
+A_env1 <- A_env1[2:length(A_env1)]
+A_env2 <- (output_tot_env2$`Normalized Area`)
+A_env2 <- A_env2[2:length(A_env2)]
+Area_df <- data.frame(time,A_env1,A_env2)
+Area_df[c.fit_idx[1]:length(A_env1),]$A_env1 <- output_tot_env2$`Normalized Area`[c.fit_idx[1]:length(A_env1)]
+Area_df[A_Norm_idx,]$A_env1 <- output_tot_env1$`Normalized Area`[A_Norm_idx]
+Area_df[c.fit_idx[1]:length(A_env2),]$A_env2 <- output_tot_env1$`Normalized Area`[c.fit_idx[1]:length(A_env2)]
+Area_df[A_Norm_idx,]$A_env2 <- output_tot_env2$`Normalized Area`[A_Norm_idx]
+DA_env1 <- output_tot_env1$`Relative DA`
+DA_env2 <- output_tot_env2$`Relative DA`
+DA_env1 <- DA_env1[2:length(DA_env1)]
+DA_env2 <- DA_env2[2:length(DA_env2)]
+DA_env2[1] <- 0
+DA_df <- data.frame(time,DA_env1,DA_env2)
+DA_df[c.fit_idx,]$DA_env1<- DA_env2[c.fit_idx]
+DA_df[c.fit_idx,]$DA_env2 <- DA_env1[c.fit_idx]
+DA_df$DA_env1 <- na.locf(DA_df$DA_env1)
+DA_df$DA_env2 <- na.locf(DA_df$DA_env2)
+
+
+colnames(Area_df) <- c("Time (Sec)","Normalized Area of Envelope 1","Normalized Area of Envelope 2")
+colnames(DA_df) <- c("Time (Sec)","Relative Deterium Incorperation of Envelope 1","Relative Deterium Incorperation of Envelope 2")
+
+write.csv(Area_df, paste0(Pep_Name,"_","Normalized_Area_Data.csv"))
+write.csv(DA_df, paste0(Pep_Name,"_","Relative_DA_Data.csv") )
+
+Final_Det_frame<- Area_df %>%
+  as.data.frame() %>% 
+  flextable()
+
+fin_bord <- fp_border(color ="dimgray", style="solid", width=2)
+
+Final_Det_frame<- Final_Det_frame %>%
+  set_table_properties(layout = "autofit")%>%
+  bg(bg="white", part="all")%>%
+  hline() %>%
+  set_header_labels(Final_Det_frame, rowname = "Timepoint")%>%
+  bold(part="header")%>%
+  bold(j=1)%>%
+  vline(j=1, border = fin_bord )
+
+autofit(Final_Det_frame)
+save_as_image(Final_Det_frame, path =paste0(Pep_Name,"_","Normalized_Area_Data.jpeg"))
+
+Final_DA_frame<- DA_df %>%
+  as.data.frame() %>% 
+  flextable()
+
+fin_bord <- fp_border(color ="dimgray", style="solid", width=2)
+
+Final_DA_frame<- Final_DA_frame %>%
+  set_table_properties(layout = "autofit")%>%
+  bg(bg="white", part="all")%>%
+  hline() %>%
+  set_header_labels(Final_DA_frame, rowname = "Timepoint")%>%
+  bold(part="header")%>%
+  bold(j=1)%>%
+  vline(j=1, border = fin_bord )
+
+autofit(Final_DA_frame)
+save_as_image(Final_DA_frame, path =paste0(Pep_Name,"_","Absolute_DA_Data.jpeg"))
+
+layout(mat = matrix(c(1, 2, 3, 3, 4,4),
+                    ncol=2, 
+                    byrow=TRUE),
+       heights = c(10,1.7,0.00000001),
+       widths = c(10,10)
+)
+par(mar=c(4,4,1,1))
+layout.show(n=4)
+
+y_rel_max<- max(A_env1,A_env2)
+y_abi_max <- max(DA_df[,c(2,3)])
+DA_1 <- DA_df[,2]
+DA_2 <- DA_df[,3]
+
+plot(log(time),A_env1, col="green", type="b", xlab="Log of Time (Sec)", ylab="Normalized Areas", main="Log Linear Graph of Normalized Areas vs Time", lwd=2, font=2, cex.lab=1.2, cex.axis=1.2, ylim=c(0,(y_rel_max+0.1)))
+lines(log(time),A_env2, col="blue", type="b", lwd=2)
+plot(log(time),DA_1, col="green", type="b", xlab="Log of Time (Sec)", ylab="Relative Deterium Incorperation", main="Log Linear Graph of Relative Deterium vs Time", lwd=2, font=2, cex.lab=1.2, cex.axis=1.2, ylim=c(0,(y_abi_max+0.1)))
+lines(log(time),DA_2, col="blue", type="b", lwd=2)
+
+
+plot(1, type = "n", axes=F, xlab="", ylab="") # Create empty plot
+legend("center", lty = c(1,1), horiz = TRUE, col = c("green", "blue"), c("Envelope 1", "Envelope 2"), lwd = 2, cex=1.1)
+
+dev.copy(jpeg,paste0(Pep_Name, "_","Normalized_Area_and_DA_Graph.jpeg"), width=3840, height=2020, res=200)
+dev.size(units=c("px"))
+dev.off()
+
+graphics.off()
+}
