@@ -21,6 +21,7 @@
   library(gridExtra)
   library(minpack.lm)
   library(readr)
+  library(reshape2)
   show_col_types = FALSE
 } #Call Packages Needed
 
@@ -36,12 +37,12 @@ epsilon = 1e-06
 
 #Data Setup
 {
-setwd("C:/Users/Owner/OneDrive/UMB/Deredge Lab/For Vincent/FliD/EX1/361-375")
-data <- read_csv("361 to 375.csv")
+setwd("G:/DXPS_EX1_Analysis/WT/183_to_199")
+data <- read_csv("Peptide_183_to_199_WT_DXPS.csv")
 show_col_types = FALSE
-num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7)
-charge_list <- c(2,5)
-Pep_Name <- c("FliD_361-375")
+num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7,8,9)
+charge_list <- c(2)
+Pep_Name <- c("DXPS_WT_183_to_199")
 }
 
 
@@ -57,18 +58,18 @@ border_width <- 1.1 #width of black border
 #Select Analysis Mode
 {
 time <- c() #time series data, if none leave as c()
-mutant <- c() #time series data with, if none leave as c()
+mutant <- c(1,2,3,4,5,6,7,8,9) #time series data with, if none leave as c()
 temp <- c() #temperature change data, if none leave as c()
-conc <- c(1,2,3,4,5,6) #Concentration change data, if none leave as c()
+conc <- c() #Concentration change data, if none leave as c()
 }
 
 
 #Analysis Graph Modes
 {
-Log=TRUE #used to graph the X-axis as a log of the value = TRUE if log, = FALSE if linear
-Linear=FALSE #in reference to a linear graphing of x-values (not taking the log of it). = TRUE if linear, = FALSE if log
-Line = TRUE #Plot a line graph
-Bar = FALSE #plot a bar graph
+Log=FALSE #used to graph the X-axis as a log of the value = TRUE if log, = FALSE if linear
+Linear=TRUE #in reference to a linear graphing of x-values (not taking the log of it). = TRUE if linear, = FALSE if log
+Line = FALSE #Plot a line graph
+Bar = TRUE #plot a bar graph
 }
 
 
@@ -77,15 +78,15 @@ Bar = FALSE #plot a bar graph
 #XTD <- TD
 
 
-data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec, X1.min, X10.min, X1.hr, X2.hr) #Load in IPA data
+data_list <- qpcR:::cbind.na(Seq.1.X,Seq.2.X,Seq.3.X,Apo.1.X,Apo.2.X,Apo.3.X,MAP.1.X,MAP.2.X,MAP.3.X) #Load in IPA data
 
 #Initial Values Call, No need to change ever
 {
   Peptide_Names <- c(colnames(data))
   output <- list()
   c.fit_tot <- list()
-  x_max <- max(na.omit(data))
-  x_min <- min(na.omit(data$TD))
+  x_max <- max(na.omit(data[grep(pattern="X|x",x=colnames(data))]))
+  x_min <- min(na.omit(data[grep(pattern="X|x",x=colnames(data))]))
 }
 
 #Important notes:
@@ -671,7 +672,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -974,7 +975,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -1277,7 +1278,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -1580,7 +1581,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -1883,7 +1884,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -2186,7 +2187,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -2489,7 +2490,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -2792,7 +2793,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -3095,7 +3096,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -3398,7 +3399,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -3701,7 +3702,7 @@ Num_Envelops=2
         }
       }else {
         output[[k]] <- assign(Peptide_Names[k+(k-1)], data.frame(mu.fit[1], centroid[1], c.fit[1], sigma.fit[1], FWHM[1], AUC_tot[1],Chi_sqr, c(1), AUC_tot[1], FWHM_Tot[1]))
-        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area',, 'Area Total','Total Width')
+        colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area', 'Area Total','Total Width')
         rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
       }
     }
@@ -4021,6 +4022,7 @@ Num_Envelops=2
   
   Uni_Idx2 <- which((output_tot_env2$`Mean Value`)%in%(Uni_Chk2$`Mean Value`))
   
+  if(length(Uni_Idx2)!=0){
   for(j in Uni_Idx2){
     if(j > 1){
       r = j
@@ -4028,11 +4030,12 @@ Num_Envelops=2
       output_tot_env1 <- rbind(output_tot_env1[1:(j-1), ],newrow_1, output_tot_env1[- (1:(j-1)), ])
     } 
   }
+  }
   
   A_env1 <- (output_tot_env1$`Normalized Area`)
-  A_env1 <- A_env1[2:length(A_env1)]
+  A_env1 <- A_env1[1:length(A_env1)]
   A_env2 <- (output_tot_env2$`Normalized Area`)
-  A_env2 <- A_env2[2:length(A_env2)]
+  A_env2 <- A_env2[1:length(A_env2)]
   if(length(time)!=0){
   Area_df <- data.frame(time,A_env1,A_env2)
   Area_df[is.na(Area_df)] <- 0
@@ -4078,8 +4081,8 @@ Num_Envelops=2
   if(length(time)!=0){
   DA_env1 <- output_tot_env1$`Relative DA`
   DA_env2 <- output_tot_env2$`Relative DA`
-  DA_env1 <- DA_env1[2:length(DA_env1)]
-  DA_env2 <- DA_env2[2:length(DA_env2)]
+  DA_env1 <- DA_env1[1:length(DA_env1)]
+  DA_env2 <- DA_env2[1:length(DA_env2)]
   DA_env2[1] <- 0
   DA_env1[1] <- 0
   DA_df <- data.frame(time,DA_env1,DA_env2)
@@ -4113,8 +4116,8 @@ Num_Envelops=2
   if(length(conc)!=0){
     DA_env1 <- output_tot_env1$`Relative DA`
     DA_env2 <- output_tot_env2$`Relative DA`
-    DA_env1 <- DA_env1[2:length(DA_env1)]
-    DA_env2 <- DA_env2[2:length(DA_env2)]
+    DA_env1 <- DA_env1[1:length(DA_env1)]
+    DA_env2 <- DA_env2[1:length(DA_env2)]
     DA_env2[1] <- 0
     DA_env1[1] <- 0
     DA_df <- data.frame(conc,DA_env1,DA_env2)
