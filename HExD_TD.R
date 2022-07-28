@@ -578,8 +578,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p3)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p3,width=7,height=7)
+  suppressWarnings(plot(p3))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p3,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -822,8 +822,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p4)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p4,width=7,height=7)
+  suppressWarnings(plot(p4))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p4,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -1066,8 +1066,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p5)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p5,width=7,height=7)
+  suppressWarnings(plot(p5))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p5,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -1310,8 +1310,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p6)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p6,width=7,height=7)
+  suppressWarnings(plot(p6))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p6,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -1554,8 +1554,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p7)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p7,width=7,height=7)
+  suppressWarnings(plot(p7))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p7,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -1798,8 +1798,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p8)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p8,width=7,height=7)
+  suppressWarnings(plot(p8))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p8,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -2042,8 +2042,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p9)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p9,width=7,height=7)
+  suppressWarnings(plot(p9))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p9,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -2286,8 +2286,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p10)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p10,width=7,height=7)
+  suppressWarnings(plot(p10))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p10,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -2530,8 +2530,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p11)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p11,width=7,height=7)
+  suppressWarnings(plot(p11))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p11,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
@@ -2774,8 +2774,8 @@ Num_Envelops=2
       FWHM_Sum = 2*sqrt(log(2)*2)*sigma.fit[1]
     }
   }
-  plot(p12)
-  ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p12,width=7,height=7)
+  suppressWarnings(plot(p12))
+  suppressWarnings(ggsave(paste0('p',k,"_",Pep_Name,".jpeg"),p12,width=7,height=7))
   
   FWHM_1 = 2*sqrt(log(2)*2)*sigma.fit[1]
   FWHM_2 = 2*sqrt(log(2)*2)*sigma.fit[2]
