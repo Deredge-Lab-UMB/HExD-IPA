@@ -22,45 +22,55 @@
   library(minpack.lm)
   library(readr)
   show_col_types = FALSE
-}
-
-
+} #Call Packages Needed
 
 
 ###Span good range 0.3 to 0.8, maxit good range 90 to 150, epsilon good range 1e-03 to 1e-08.
 ### Initial should be set to span = 0.5, Maxit=150, Epsiol=1e-06. If the code goes infinate set span = 0.7, and epsilon=1e-03.
+{
 span=0.5
 maxit=150
 epsilon = 1e-06
+}
 
 
 #Data Setup
+{
 setwd("C:/Users/Owner/OneDrive/UMB/Deredge Lab/For Vincent/FliD/EX1/361-375")
 data <- read_csv("361 to 375.csv")
 show_col_types = FALSE
 num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7)
-charge <- c(2)
+charge_list <- c(2,5)
 Pep_Name <- c("FliD_361-375")
+}
+
 
 #Plot Setup
+{
 lwd_mz <- 0.8 #line width of mass spec data graph
 lwd_env <-1.3 #line width of all envelopes
 axis_font <- 15 #axis font size
 border_width <- 1.1 #width of black border
-
+}
 
 
 #Select Analysis Mode
+{
 time <- c() #time series data, if none leave as c()
 mutant <- c() #time series data with, if none leave as c()
 temp <- c() #temperature change data, if none leave as c()
 conc <- c(1,2,3,4,5,6) #Concentration change data, if none leave as c()
+}
+
 
 #Analysis Graph Modes
+{
 Log=TRUE #used to graph the X-axis as a log of the value = TRUE if log, = FALSE if linear
 Linear=FALSE #in reference to a linear graphing of x-values (not taking the log of it). = TRUE if linear, = FALSE if log
 Line = TRUE #Plot a line graph
 Bar = FALSE #plot a bar graph
+}
+
 
 ###Code Cleaning (Once after IPA, then comment out again):
 #XUndeut <- undeut
@@ -98,6 +108,11 @@ Num_Envelops=2
 
 {
   k=1
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -399,6 +414,11 @@ Num_Envelops=2
 
 {
   k=2
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -697,6 +717,11 @@ Num_Envelops=2
 
 {
   k=3
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -995,6 +1020,11 @@ Num_Envelops=2
 
 {
   k=4
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -1293,6 +1323,11 @@ Num_Envelops=2
 
 {
   k=5
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -1591,6 +1626,11 @@ Num_Envelops=2
 
 {
   k=6
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -1889,6 +1929,11 @@ Num_Envelops=2
 
 {
   k=7
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -2187,6 +2232,11 @@ Num_Envelops=2
 
 {
   k=8
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -2485,6 +2535,11 @@ Num_Envelops=2
 
 {
   k=9
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -2783,6 +2838,11 @@ Num_Envelops=2
 
 {
   k=10
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -3081,6 +3141,11 @@ Num_Envelops=2
 
 {
   k=11
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
@@ -3379,6 +3444,11 @@ Num_Envelops=2
 
 {
   k=12
+  if (length(charge_list)>1){
+    charge <- charge_list[k]
+  }else{
+    charge <- charge_list[1]
+  }
   data_x <- na.omit(data_list[k+(k-1)])
   data_y <- na.omit(data_list[k+1+(k-1)])
   x_i <- c(data_x$x)
