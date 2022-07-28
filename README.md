@@ -1,0 +1,11 @@
+HExD-IPA aims to address issues within current EX1 kinetic bimodal deconvolution. The current gold standard, HxExpress, lacks ease of use perameters, efficieny, and options beside time series data, with no consideration for theoretical limits as set by a totally deuterated control.
+
+HExD-IPA provides an exponentially quicker and more user friendly package to deconvolute bimodal peaks, while also creating publication ready plot figures and data tables. This is done within 3 software packages avaliable within this github. The first is HExD.R This package provides analysis of time series data, concentration data, temperature data, and mutant data. HExD_TD.R provides analysis with consideration to a fully deuterated control system. IPA.R is an addon to HExD which allows a user to manually select isotopic peaks without the need for a mass spec analysis software.
+
+HExD-IPA uses the R package Mixtools which is built upon model-based clustering through an Expectation-Maximization (EM) Algorithm which works by finding the maximum likelihood parameters of the model by maximizing the Operator. steps. First, the initial value is computed and maximized. Using this value, a Bayesian likelihood prior is introduced in the next iteration to aid in the computation and maximation of the values.
+
+The IPA.R function allows the user to import a .csv file, and select the x and y-axis respectively. Double clicking on the peak will plot a blue line and will assign that peak to a data table for use within HExD.
+
+For each timepoint or peptide, HExD outputs each individual plot, as well as a grid plot. Furthermore, HExD_iPA provides a full data table, Normalized area data tabel and plot, and an Absolute/Relative deuteration data table and plot (each with a .csv for further analysis).
+
+While the Data found with HExD-IPA is of negligible difference to HxExpress, HExD-IPA is far more efficient, more user friendly, and provides figures that are ready for publication. When looking at the centroids as determined by both methods, there was an average difference of 0.0342 m/z which validates the accuracy of HExD-IPA. HExD-IPA has an average run time of 9 minutes per peptide, with a 5 peptide, 8 time point system taking 1 hour to finalize.
