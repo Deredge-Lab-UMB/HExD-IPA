@@ -22,43 +22,46 @@
   library(minpack.lm)
   library(readr)
   show_col_types = FALSE
-}
-
-
+} #Call Packages Needed
 
 
 ###Span good range 0.3 to 0.8, maxit good range 90 to 150, epsilon good range 1e-03 to 1e-08.
 ### Initial should be set to span = 0.5, Maxit=150, Epsiol=1e-06. If the code goes infinate set span = 0.7, and epsilon=1e-03.
+{
 span=0.5
 maxit=150
 epsilon = 1e-06
-
+}
 
 #Data Setup
+{
 setwd("C:/Users/Owner/OneDrive/UMB/Deredge Lab/For Vincent/p38/EX1/Beta/164-169/TD")
 data <- read_csv("beta 164-169.csv")
 show_col_types = FALSE
 num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7,8)
 charge <- c(2)
 Pep_Name <- c("P38_Beta_164-169")
+}
 
 #Plot Setup
+{
 lwd_mz <- 1.3 #line width of mass spec data graph
 lwd_env <-2 #line width of all envelopes
 axis_font <- 15 #axis font size
 border_width <- 1.1 #width of black border
+}
 
-#Select Analysis Mode
+#Time Data in Seconds
 time <- c(1, 10, 10,(60*10), (60*10),(3600*2),(3600*2)) #time series data with TD control
 
-#Code Cleaning
+###Code Cleaning (Once after IPA, then comment out again):
 #XUndeut <- undeut
 #XTD <- TD
 
-
+#Call data obtained via IPA
 data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec,X11.sec, X10.m, X11.m, X2.h, X2.01.h)
 
-#Initial Values Call
+#Initial Values Call, No need to change ever
 {
   Peptide_Names <- c(colnames(data))
   output <- list()
@@ -66,6 +69,19 @@ data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec,X11.sec, X10.m, X11.m, X2.h, 
   x_max <- max(na.omit(data))
   x_min <- min(na.omit(data$TD))
 }
+
+#Important notes:
+#1a) A good number of iterations is between 15 to 60 Iterations for a simple system
+#1b) If the system shows unimodality and a bad fit/if the system goes infinate within NLSLM fitting then aim for 3 iterations
+#2) The first thing to change with any errors is the Span. A good test is to go up and down within the listed range
+#3) If the span doesn't work, change the epsilon
+#4) If nothing works, check the IPA to ensure the proper peaks were selected
+#5) If the timepoint flags a false bimodal at a later timepoint, change Num_envelops to =1 and color_1 = 4
+#6) if the colors of the two envelops are switched, change color_1 to =4 and color_3 to =3 and rerun just the plot section
+#7) If there is a Chi squared error it means that the fit is too far from the original data and should be rerun
+#8) When running the code, be sure to have the plots tab open to visually catch any fitting issues
+#9) If a block in a timepoint section fails, address the error if needed and then rerun startng from the data assignment block of that section
+#10) Each block under each timepiont section is the same, so the naming is only applied to the first 4 blocks for reference.
 
 ###TD
 {
@@ -82,7 +98,7 @@ data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec,X11.sec, X10.m, X11.m, X2.h, 
   y.sg4 <- na.omit(y.sg4[[1]])
   y.sg4 <- savgol(y.sg4, 3, 4, 0)
   df_smooth <- data.frame(x, y.sg4)
-}
+} #Data Assignment and Initial Calls
 {
   mixture<-normalmixEM(x_i, sd.constr = c("a", "a"), arbmean = TRUE, arbvar = TRUE, maxit=maxit, epsilon = epsilon, ECM=TRUE)
   
@@ -93,7 +109,7 @@ data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec,X11.sec, X10.m, X11.m, X2.h, 
   amp1 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[1])
   
   amp2 <- approx(p_pred$x_i, p_pred$ptest, xout=mixture$mu[2])
-}
+} #Mixed Effects Modeling and Amplitude Prediction via regression (finds peak at non-discrete datapoint)
 {
     x <- x_i
     amp1 <- max(c(amp1$y, amp2$y))
@@ -118,7 +134,7 @@ data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec,X11.sec, X10.m, X11.m, X2.h, 
     sigma.fit <- coef.fit[2]
     c.fit <- coef.fit[3]
     sd_con <-sigma.fit
-}
+} #NLSLM (Non-Linear Least Squares Levenberg-Marquardt) fitting. Fits the two bimodal envelops
 {
   plot_x <- x_i
   plot_y <-y_i
@@ -205,7 +221,7 @@ data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec,X11.sec, X10.m, X11.m, X2.h, 
     colnames(output[[k]]) <- c('Mean Value','Centroid','Height','SD','FWHM', 'Area','Chi Squared', 'Normalized Area','Relative DA', 'Area Total','Total Width')
     rownames(output[[k]]) <- c(print(paste0(Peptide_Names[k+(k-1)]," ", "Unimodal Peak")))
   }    
-}
+} #Plot creation, Data table creation, and Chi Square Testing
 
 
 ###Undeut
@@ -426,6 +442,7 @@ Num_Envelops=1
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=3
@@ -485,8 +502,14 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
+    if(Replicate=FALSE){
     c1_high <- output[[k-1]]$Height[1]
     c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -670,6 +693,7 @@ Num_Envelops=2
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=4
@@ -729,8 +753,15 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
+    
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -914,6 +945,7 @@ Num_Envelops=2
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=5
@@ -973,8 +1005,15 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
+    
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -1158,6 +1197,7 @@ Num_Envelops=2
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=6
@@ -1217,8 +1257,15 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
+    
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -1402,6 +1449,7 @@ Num_Envelops=2
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=7
@@ -1461,8 +1509,14 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -1646,6 +1700,7 @@ Num_Envelops=2
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=8
@@ -1705,8 +1760,14 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -1890,6 +1951,7 @@ Num_Envelops=2
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=9
@@ -1949,8 +2011,14 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -2193,8 +2261,14 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -2378,6 +2452,7 @@ Num_Envelops=2
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=11
@@ -2437,8 +2512,14 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -2622,6 +2703,7 @@ Num_Envelops=2
 Color_1=3
 Color_2=4
 Num_Envelops=2
+Replicate=FALSE
 
 {
   k=12
@@ -2681,8 +2763,14 @@ Num_Envelops=2
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
-    c1_high <- output[[k-1]]$Height[1]
-    c2_low <- output[[k-1]]$Height[2]
+    if(Replicate=FALSE){
+      c1_high <- output[[k-1]]$Height[1]
+      c2_low <- output[[k-1]]$Height[2]
+    }
+    if(Replicate=TRUE){
+      c1_high <- 100
+      c2_low <- 0
+    }
     
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
