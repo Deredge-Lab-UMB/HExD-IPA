@@ -36,12 +36,12 @@ epsilon = 1e-06
 
 #Data Setup
 {
-setwd("C:/Users/Owner/OneDrive/UMB/Deredge Lab/For Vincent/FliD/EX1/361-375")
-data <- read_csv("361 to 375.csv")
+setwd("C:/Users/vmlmy/OneDrive/UMB/Deredge Lab/Deconvolution/ABTIR/Peptide 58-66 Apo")
+data <- read_csv("58-66.csv")
 show_col_types = FALSE
-num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7)
-charge_list <- c(2,5)
-Pep_Name <- c("FliD_361-375")
+num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7,8,9,10,11)
+charge_list <- c(2)
+Pep_Name <- c("ABTIR_58-66_Apo")
 }
 
 
@@ -56,10 +56,10 @@ border_width <- 1.1 #width of black border
 
 #Select Analysis Mode
 {
-time <- c() #time series data, if none leave as c()
+time <- c(1,10,11,12,60,61,62,600,660,720,3600) #time series data, if none leave as c()
 mutant <- c() #time series data with, if none leave as c()
 temp <- c() #temperature change data, if none leave as c()
-conc <- c(1,2,3,4,5,6) #Concentration change data, if none leave as c()
+conc <- c() #Concentration change data, if none leave as c()
 }
 
 
@@ -73,11 +73,11 @@ Bar = FALSE #plot a bar graph
 
 
 ###Code Cleaning (Once after IPA, then comment out again):
-#XUndeut <- undeut
+#XUndeut <- Undeut
 #XTD <- TD
 
 
-data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec, X1.min, X10.min, X1.hr, X2.hr) #Load in IPA data
+data_list <- qpcR:::cbind.na(XUndeut,X10.sec,X11.sec,X12.sec,X60.sec,X61.sec,X62.sec,X10.min,X11.min,X12.min,X1.hr) #Load in IPA data
 
 #Initial Values Call, No need to change ever
 {
@@ -85,7 +85,7 @@ data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec, X1.min, X10.min, X1.hr, X2.h
   output <- list()
   c.fit_tot <- list()
   x_max <- max(na.omit(data))
-  x_min <- min(na.omit(data$TD))
+  x_min <- min(na.omit(data$`1 hr`))
 }
 
 #Important notes:
@@ -104,7 +104,7 @@ data_list <- qpcR:::cbind.na(XTD, XUndeut, X10.sec, X1.min, X10.min, X1.hr, X2.h
 ###First Time Point
 Color_1=3
 Color_2=4
-Num_Envelops=2
+Num_Envelops=1
 Replicate=FALSE
 
 
@@ -167,16 +167,16 @@ Replicate=FALSE
     mu.fit <- coef.fit[1]
     sigma.fit <- coef.fit[2]
     c.fit <- coef.fit[3]
-  }else {
+  }else{
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -419,7 +419,7 @@ Replicate=FALSE
 ###Second Time Point
 Color_1=3
 Color_2=4
-Num_Envelops=2
+Num_Envelops=1
 Replicate=FALSE
 
 {
@@ -481,20 +481,19 @@ Replicate=FALSE
     mu.fit <- coef.fit[1]
     sigma.fit <- coef.fit[2]
     c.fit <- coef.fit[3]
-  }else {
+  }else{
     x <- x_i
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
-      
     }
     
     fit <- nlsLM(y_i ~ (C1*exp(-(x-mean1)**2/(2 * sigma1**2)) +
@@ -731,7 +730,7 @@ Replicate=FALSE
 Color_1=3
 Color_2=4
 Num_Envelops=2
-Replicate=FALSE
+Replicate=TRUE
 
 {
   k=3
@@ -797,11 +796,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -1042,7 +1041,7 @@ Replicate=FALSE
 Color_1=3
 Color_2=4
 Num_Envelops=2
-Replicate=FALSE
+Replicate=TRUE
 
 {
   k=4
@@ -1108,11 +1107,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -1419,11 +1418,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -1664,7 +1663,7 @@ Replicate=FALSE
 Color_1=3
 Color_2=4
 Num_Envelops=2
-Replicate=FALSE
+Replicate=TRUE
 
 {
   k=6
@@ -1730,11 +1729,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -1975,7 +1974,7 @@ Replicate=FALSE
 Color_1=3
 Color_2=4
 Num_Envelops=2
-Replicate=FALSE
+Replicate=TRUE
 
 {
   k=7
@@ -2041,11 +2040,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -2352,11 +2351,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -2597,7 +2596,7 @@ Replicate=FALSE
 Color_1=3
 Color_2=4
 Num_Envelops=2
-Replicate=FALSE
+Replicate=TRUE
 
 {
   k=9
@@ -2663,11 +2662,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -2908,7 +2907,7 @@ Replicate=FALSE
 Color_1=3
 Color_2=4
 Num_Envelops=2
-Replicate=FALSE
+Replicate=TRUE
 
 {
   k=10
@@ -2974,11 +2973,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -3285,11 +3284,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -3596,11 +3595,11 @@ Replicate=FALSE
     amp1 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[1])
     amp2 <- approx(p_pred$x, p_pred$ptest, xout=mixture$mu[2])
     if(length(time)!=0 && k!=1 | length(conc)!=0 && k!=1){
-      if(Replicate=FALSE){
+      if(Replicate==FALSE){
         c1_high <- output[[k-1]]$Height[1]
         c2_low <- output[[k-1]]$Height[2]
       }
-      if(Replicate=TRUE){
+      if(Replicate==TRUE){
         c1_high <- 100
         c2_low <- 0
       }
@@ -4127,9 +4126,9 @@ Replicate=FALSE
   }
   
   A_env1 <- (output_tot_env1$`Normalized Area`)
-  A_env1 <- A_env1[2:length(A_env1)]
+  A_env1 <- A_env1[1:length(A_env1)]
   A_env2 <- (output_tot_env2$`Normalized Area`)
-  A_env2 <- A_env2[2:length(A_env2)]
+  A_env2 <- A_env2[1:length(A_env2)]
   if(length(time)!=0){
   Area_df <- data.frame(time,A_env1,A_env2)
   Area_df[is.na(Area_df)] <- 0
@@ -4175,8 +4174,8 @@ Replicate=FALSE
   if(length(time)!=0){
   DA_env1 <- output_tot_env1$`Relative DA`
   DA_env2 <- output_tot_env2$`Relative DA`
-  DA_env1 <- DA_env1[2:length(DA_env1)]
-  DA_env2 <- DA_env2[2:length(DA_env2)]
+  DA_env1 <- DA_env1[1:length(DA_env1)]
+  DA_env2 <- DA_env2[1:length(DA_env2)]
   DA_env2[1] <- 0
   DA_env1[1] <- 0
   DA_df <- data.frame(time,DA_env1,DA_env2)
@@ -4210,8 +4209,8 @@ Replicate=FALSE
   if(length(conc)!=0){
     DA_env1 <- output_tot_env1$`Relative DA`
     DA_env2 <- output_tot_env2$`Relative DA`
-    DA_env1 <- DA_env1[2:length(DA_env1)]
-    DA_env2 <- DA_env2[2:length(DA_env2)]
+    DA_env1 <- DA_env1[1:length(DA_env1)]
+    DA_env2 <- DA_env2[1:length(DA_env2)]
     DA_env2[1] <- 0
     DA_env1[1] <- 0
     DA_df <- data.frame(conc,DA_env1,DA_env2)
