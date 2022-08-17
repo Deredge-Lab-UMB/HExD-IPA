@@ -21,6 +21,7 @@
   #install.packages('gridExtra')
   #install.packages('minpack.lm')
   #install.packages('readr')
+  #install.packages('qcpR')
 } #FIRST TIME ONLY
 
 {
@@ -61,12 +62,12 @@ epsilon = 1e-06
 
 #Data Setup
 {
-setwd("C:/Users/vmlmy/OneDrive/UMB/Deredge Lab/Deconvolution/ABTIR/Peptide 58-66 Apo")
-data <- read_csv("58-66.csv")
+setwd("~/Documents/University of Maryland, Baltimore/Deredge Lab/Wintrode Lab Rotation/AbTIR 2020/AbTIR_HExD_EX1 Deconvolution/Peptide 58 to 69_Apo")
+data <- read_csv("58-69_Apo.csv")
 show_col_types = FALSE
 num_peptime <- c (1, 2, 3 ,4 ,5 ,6,7,8,9,10,11)
 charge_list <- c(2)
-Pep_Name <- c("ABTIR_58-66_Apo")
+Pep_Name <- c("AbTIR_58-69_Apo")
 }
 
 
@@ -81,7 +82,7 @@ border_width <- 1.1 #width of black border
 
 #Select Analysis Mode
 {
-time <- c(1,10,11,12,60,61,62,600,660,720,3600) #time series data, if none leave as c()
+time <- c(1,10,11,60,61,600,660,3600,3960,7200,7560) #time series data, if none leave as c()
 mutant <- c() #time series data with, if none leave as c()
 temp <- c() #temperature change data, if none leave as c()
 conc <- c() #Concentration change data, if none leave as c()
@@ -101,8 +102,10 @@ Bar = FALSE #plot a bar graph
 #XUndeut <- Undeut
 #XTD <- TD
 
+#If your on a Mac running Mac OS, you will need Xquartz to run the following step. This can be installed from here: https://www.xquartz.org/
 
-data_list <- qpcR:::cbind.na(XUndeut,X10.sec,X11.sec,X12.sec,X60.sec,X61.sec,X62.sec,X10.min,X11.min,X12.min,X1.hr) #Load in IPA data
+data_list <- qpcR:::cbind.na(XUndeut,X10.sec,X11.sec,X60.sec,X61.sec,X10.min,X11.min,X1.hr,X1.1.hr,X2.hr,X2.1.hr) #Load in IPA data
+
 
 #Initial Values Call, No need to change ever
 {
