@@ -22,6 +22,7 @@
   #install.packages('minpack.lm')
   #install.packages('readr')
   #install.packages('qcpR')
+  #webshot::install_phantomjs()
 } #FIRST TIME ONLY
 
 {
@@ -112,8 +113,8 @@ data_list <- qpcR:::cbind.na(XUndeut,X10.sec,X11.sec,X60.sec,X61.sec,X10.min,X11
   Peptide_Names <- c(colnames(data))
   output <- list()
   c.fit_tot <- list()
-  x_max <- max(na.omit(data))
-  x_min <- min(na.omit(data$`1 hr`))
+  x_max <- max(data[grep(pattern = "x|X", x=colnames(data))])
+  x_min <- min(data[grep(pattern = "x|X", x=colnames(data))])
 }
 
 #Important notes:
@@ -132,7 +133,7 @@ data_list <- qpcR:::cbind.na(XUndeut,X10.sec,X11.sec,X60.sec,X61.sec,X10.min,X11
 ###First Time Point
 Color_1=3
 Color_2=4
-Num_Envelops=1
+Num_Envelops=2
 Replicate=FALSE
 
 
@@ -447,7 +448,7 @@ Replicate=FALSE
 ###Second Time Point
 Color_1=3
 Color_2=4
-Num_Envelops=1
+Num_Envelops=2
 Replicate=FALSE
 
 {
